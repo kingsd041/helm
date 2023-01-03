@@ -31,6 +31,8 @@ HAS_OPENSSL="$(type "openssl" &> /dev/null && echo true || echo false)"
 HAS_GPG="$(type "gpg" &> /dev/null && echo true || echo false)"
 HAS_GIT="$(type "git" &> /dev/null && echo true || echo false)"
 
+INSTALL_HELM_MIRROR_URL=${INSTALL_HELM_MIRROR_URL:-'rancher-mirror.rancher.cn'}
+
 # initArch discovers the architecture for this system.
 initArch() {
   ARCH=$(uname -m)
@@ -108,11 +110,23 @@ verifySupported() {
 checkDesiredVersion() {
   if [ "x$DESIRED_VERSION" == "x" ]; then
     # Get tag from release URL
+    if [ "${INSTALL_HELM_MIRROR}" = cn ]; then
+    local latest_release_url="https://rancher-mirror.rancher.cn/helm/channels/latest"
+    else
     local latest_release_url="https://github.com/helm/helm/releases"
+    fi
     if [ "${HAS_CURL}" == "true" ]; then
+      if [ "${INSTALL_HELM_MIRROR}" = cn ]; then
+      TAG=$(curl -Ls $latest_release_url)
+      else
       TAG=$(curl -Ls $latest_release_url | grep 'href="/helm/helm/releases/tag/v3.[0-9]*.[0-9]*\"' | sed -E 's/.*\/helm\/helm\/releases\/tag\/(v[0-9\.]+)".*/\1/g' | head -1)
+      fi
     elif [ "${HAS_WGET}" == "true" ]; then
+      if [ "${INSTALL_HELM_MIRROR}" = cn ]; then
+      TAG=$(wget $latest_release_url -O - 2>&1)
+      else
       TAG=$(wget $latest_release_url -O - 2>&1 | grep 'href="/helm/helm/releases/tag/v3.[0-9]*.[0-9]*\"' | sed -E 's/.*\/helm\/helm\/releases\/tag\/(v[0-9\.]+)".*/\1/g' | head -1)
+      fi
     fi
   else
     TAG=$DESIRED_VERSION
@@ -140,7 +154,11 @@ checkHelmInstalledVersion() {
 # for that binary.
 downloadFile() {
   HELM_DIST="helm-$TAG-$OS-$ARCH.tar.gz"
+  if [ "${INSTALL_HELM_MIRROR}" = cn ]; then
+  DOWNLOAD_URL="https://rancher-mirror.rancher.cn/helm/$TAG/$HELM_DIST"
+  else
   DOWNLOAD_URL="https://get.helm.sh/$HELM_DIST"
+  fi
   CHECKSUM_URL="$DOWNLOAD_URL.sha256"
   HELM_TMP_ROOT="$(mktemp -dt helm-installer-XXXXXX)"
   HELM_TMP_FILE="$HELM_TMP_ROOT/$HELM_DIST"
@@ -324,7 +342,11 @@ verifySupported
 checkDesiredVersion
 if ! checkHelmInstalledVersion; then
   downloadFile
+  if [ "${INSTALL_HELM_MIRROR}" = cn ]; then
+  echo "Skip the verifyFile"
+  else
   verifyFile
+  fi
   installFile
 fi
 testVersion

@@ -88,16 +88,20 @@ func setup(suite *TestSuite, tlsEnabled, insecure bool) *registry.Registry {
 		ClientOptEnableCache(true),
 		ClientOptWriter(suite.Out),
 		ClientOptCredentialsFile(credentialsFile),
-		ClientOptResolver(nil),
 		ClientOptBasicAuth(testUsername, testPassword),
 	}
 
 	if tlsEnabled {
 		var tlsConf *tls.Config
 		if insecure {
-			tlsConf, err = tlsutil.NewClientTLS("", "", "", true)
+			tlsConf, err = tlsutil.NewTLSConfig(
+				tlsutil.WithInsecureSkipVerify(true),
+			)
 		} else {
-			tlsConf, err = tlsutil.NewClientTLS(tlsCert, tlsKey, tlsCA, false)
+			tlsConf, err = tlsutil.NewTLSConfig(
+				tlsutil.WithCertKeyPairFiles(tlsCert, tlsKey),
+				tlsutil.WithCAFile(tlsCA),
+			)
 		}
 		httpClient := &http.Client{
 			Transport: &http.Transport{
@@ -141,14 +145,11 @@ func setup(suite *TestSuite, tlsEnabled, insecure bool) *registry.Registry {
 	config.HTTP.DrainTimeout = time.Duration(10) * time.Second
 	config.Storage = map[string]configuration.Parameters{"inmemory": map[string]interface{}{}}
 
-	// Basic auth is not possible if we are serving HTTP.
-	if tlsEnabled {
-		config.Auth = configuration.Auth{
-			"htpasswd": configuration.Parameters{
-				"realm": "localhost",
-				"path":  htpasswdPath,
-			},
-		}
+	config.Auth = configuration.Auth{
+		"htpasswd": configuration.Parameters{
+			"realm": "localhost",
+			"path":  htpasswdPath,
+		},
 	}
 
 	// config tls
@@ -183,9 +184,7 @@ func initCompromisedRegistryTestServer() string {
 			w.Header().Set("Content-Type", "application/vnd.oci.image.manifest.v1+json")
 			w.WriteHeader(200)
 
-			// layers[0] is the blob []byte("a")
-			w.Write([]byte(
-				fmt.Sprintf(`{ "schemaVersion": 2, "config": {
+			fmt.Fprintf(w, `{ "schemaVersion": 2, "config": {
     "mediaType": "%s",
     "digest": "sha256:a705ee2789ab50a5ba20930f246dbd5cc01ff9712825bb98f57ee8414377f133",
     "size": 181
@@ -197,7 +196,7 @@ func initCompromisedRegistryTestServer() string {
       "size": 1
     }
   ]
-}`, ConfigMediaType, ChartLayerMediaType)))
+}`, ConfigMediaType, ChartLayerMediaType)
 		} else if r.URL.Path == "/v2/testrepo/supposedlysafechart/blobs/sha256:a705ee2789ab50a5ba20930f246dbd5cc01ff9712825bb98f57ee8414377f133" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(200)
@@ -277,7 +276,7 @@ func testPush(suite *TestSuite) {
 	result, err := suite.RegistryClient.Push(chartData, ref, PushOptProvData(provData), PushOptCreationTime(testingChartCreationTime))
 	suite.Nil(err, "no error pushing good ref with prov")
 
-	_, err = suite.RegistryClient.Pull(ref)
+	_, err = suite.RegistryClient.Pull(ref, PullOptWithProv(true))
 	suite.Nil(err, "no error pulling a simple chart")
 
 	// Validate the output

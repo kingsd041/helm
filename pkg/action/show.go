@@ -25,9 +25,9 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 	"sigs.k8s.io/yaml"
 
-	"helm.sh/helm/v4/pkg/chart"
-	"helm.sh/helm/v4/pkg/chart/loader"
-	"helm.sh/helm/v4/pkg/chartutil"
+	chart "helm.sh/helm/v4/pkg/chart/v2"
+	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	chartutil "helm.sh/helm/v4/pkg/chart/v2/util"
 	"helm.sh/helm/v4/pkg/registry"
 )
 
@@ -69,14 +69,14 @@ func NewShow(output ShowOutputFormat, cfg *Configuration) *Show {
 	sh := &Show{
 		OutputFormat: output,
 	}
-	sh.ChartPathOptions.registryClient = cfg.RegistryClient
+	sh.registryClient = cfg.RegistryClient
 
 	return sh
 }
 
 // SetRegistryClient sets the registry client to use when pulling a chart from a registry.
 func (s *Show) SetRegistryClient(client *registry.Client) {
-	s.ChartPathOptions.registryClient = client
+	s.registryClient = client
 }
 
 // Run executes 'helm show' against the given release.
